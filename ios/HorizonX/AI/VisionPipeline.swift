@@ -121,13 +121,13 @@ struct NavigationAction {
 // MARK: - Pipeline Configuration
 
 struct PipelineConfig {
-    let targetFPS: Int = 2                // Reduce to 2 FPS to avoid rate limiting (was 5)
-    let inputSize: Int = 512              // Image resolution for API
+    let targetFPS: Int = 5                // Process 5 frames per second for smooth detection
+    let inputSize: Int = 512              // Image resolution for processing
     let maxObstacles: Int = 5             // Cap obstacles per frame
     let confidenceThreshold: Float = 0.5  // Min confidence to report
-    let useCloudVision: Bool = true       // Use Gemini Vision API
+    let useCloudVision: Bool = false      // DISABLED: Use on-device detection instead of Gemini API
     let offlineFallback: Bool = true      // Fall back to on-device when offline
-    let navigationCommandInterval: TimeInterval = 2.0  // Min time between nav commands
+    let navigationCommandInterval: TimeInterval = 1.5  // Min time between nav commands
 }
 
 // MARK: - Vision Pipeline
@@ -244,15 +244,69 @@ final class VisionPipeline: ObservableObject {
                     recommendedAction: "Proceed with caution"
                 )
             } else {
-                // Offline fallback - basic OCR only
+                // On-device detection using Apple Vision framework
+                print("VisionPipeline: Using on-device detection")
+                
+                let detector = OnDeviceObjectDetector()
+                let detectionResult = detector.detect(pixelBuffer: resized)
                 let ocrText = ocrEngine?.recognizeSync(pixelBuffer: resized)
+                
+                // Generate narration based on detected obstacles
+                let narration: String
+                let recommendedAction: String
+                var navCommand: NavigationAction
+                
+                if detectionResult.hasObstacles {
+                    let obstacleDescriptions = detectionResult.obstacles.prefix(2).map { 
+                        "\\($0.description) at \\(Int($0.distanceMeters))m" 
+                    }.joined(separator: ", ")
+                    narration = "Detected: \\(obstacleDescriptions)"
+                    
+                    // Determine recommended action based on most urgent obstacle
+                    if let urgent = detectionResult.obstacles.first(where: { $0.urgency == .immediate }) {
+                        recommendedAction = "Caution! \\(urgent.description) at \\(urgent.clockDirection) o'clock"
+                        navCommand = NavigationAction(
+                            action: urgent.clockDirection < 6 ? .stayRight : .stayLeft,
+                            reason: urgent.description,
+                            urgency: .immediate,
+                            distanceMeters: urgent.distanceMeters
+                        )
+                    } else if let soon = detectionResult.obstacles.first(where: { $0.urgency == .soon }) {
+                        recommendedAction = "\\(soon.description) ahead"
+                        navCommand = NavigationAction(
+                            action: .slowDown,
+                            reason: soon.description,
+                            urgency: .soon,
+                            distanceMeters: soon.distanceMeters
+                        )
+                    } else {
+                        recommendedAction = "Path has obstacles, proceed with awareness"
+                        navCommand = NavigationAction(
+                            action: .walkStraight,
+                            reason: "Obstacles at safe distance",
+                            urgency: .ambient
+                        )
+                    }
+                } else {
+                    narration = "Clear path ahead."
+                    recommendedAction = "Path is clear, you may proceed."
+                    navCommand = NavigationAction(
+                        action: .walkStraight,
+                        reason: "Path is clear",
+                        urgency: .ambient
+                    )
+                }
+                
                 scene = SceneDescription(
-                    narration: "Offline mode. Limited detection available.",
-                    obstacles: [],
+                    narration: narration,
+                    obstacles: detectionResult.obstacles,
                     ocrText: ocrText,
-                    pathClear: true,
-                    recommendedAction: "Proceed with caution. Full detection unavailable."
+                    pathClear: detectionResult.pathClear,
+                    recommendedAction: recommendedAction,
+                    navigationCommand: navCommand
                 )
+                
+                print("VisionPipeline: On-device detected \(detectionResult.obstacles.count) obstacles")
             }
             
             // Filter and limit obstacles
@@ -458,79 +512,251 @@ final class VisionPipeline: ObservableObject {
 
 // MARK: - On-Device Object Detection (Vision Framework)
 
-/// Uses Apple's Vision framework for basic object detection when offline.
+/// Uses Apple's Vision framework for comprehensive object detection.
 /// 
-/// This provides limited but functional obstacle detection using:
-///   - VNDetectRectanglesRequest for barriers/signs
+/// This provides functional obstacle detection using:
 ///   - VNDetectHumanRectanglesRequest for people
-///   - VNRecognizeAnimalsRequest for animals
+///   - VNRecognizeAnimalsRequest for animals/dogs
+///   - VNDetectRectanglesRequest for barriers/signs/objects
+///   - VNDetectContoursRequest for general obstacles
+///   - VNDetectFaceRectanglesRequest for people facing camera
 final class OnDeviceObjectDetector {
     
     struct DetectionResult {
         let obstacles: [Obstacle]
         let hasObstacles: Bool
+        let pathClear: Bool
     }
     
-    /// Detect basic obstacles using Vision framework.
+    /// Detect obstacles using multiple Vision framework requests.
     func detect(pixelBuffer: CVPixelBuffer) -> DetectionResult {
         var obstacles: [Obstacle] = []
-        let semaphore = DispatchSemaphore(value: 0)
+        let group = DispatchGroup()
+        let lock = NSLock()
         
-        // Human detection
-        let humanRequest = VNDetectHumanRectanglesRequest { request, error in
-            guard let results = request.results as? [VNHumanObservation] else {
-                semaphore.signal()
-                return
-            }
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+        
+        // 1. Human/Body Detection
+        group.enter()
+        let humanRequest = VNDetectHumanRectanglesRequest { [self] request, error in
+            defer { group.leave() }
+            guard let results = request.results as? [VNHumanObservation] else { return }
             
-            for (index, human) in results.prefix(3).enumerated() {
+            lock.lock()
+            for human in results.prefix(3) {
                 let rect = human.boundingBox
                 let clockDir = self.rectToClockDirection(rect)
-                let distance = self.estimateDistance(from: rect)
+                let distance = self.estimateDistanceFromPerson(from: rect)
                 
                 obstacles.append(Obstacle(
                     type: .person,
-                    description: "Person detected",
+                    description: results.count > 1 ? "Group of \\(results.count) people" : "Person ahead",
                     clockDirection: clockDir,
                     distanceMeters: distance,
                     moving: true,
                     approachDirection: .stationary,
-                    urgency: distance < 2 ? .immediate : (distance < 5 ? .soon : .ambient)
+                    urgency: distance < 2 ? .immediate : (distance < 4 ? .soon : .ambient)
                 ))
             }
-            semaphore.signal()
+            lock.unlock()
+        }
+        humanRequest.upperBodyOnly = false
+        
+        // 2. Face Detection (indicates person facing toward you)
+        group.enter()
+        let faceRequest = VNDetectFaceRectanglesRequest { [self] request, error in
+            defer { group.leave() }
+            guard let results = request.results as? [VNFaceObservation], !results.isEmpty else { return }
+            
+            lock.lock()
+            // Only add if no human was detected at similar position
+            for face in results.prefix(2) {
+                let rect = face.boundingBox
+                let clockDir = self.rectToClockDirection(rect)
+                let distance = self.estimateDistanceFromFace(from: rect)
+                
+                // Check if we already have a person at this location
+                let hasPerson = obstacles.contains { 
+                    $0.type == .person && abs($0.clockDirection - clockDir) <= 1 
+                }
+                
+                if !hasPerson {
+                    obstacles.append(Obstacle(
+                        type: .person,
+                        description: "Person facing you",
+                        clockDirection: clockDir,
+                        distanceMeters: distance,
+                        moving: true,
+                        approachDirection: .towards,
+                        urgency: distance < 3 ? .immediate : .soon
+                    ))
+                }
+            }
+            lock.unlock()
         }
         
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-        try? handler.perform([humanRequest])
-        semaphore.wait()
+        // 3. Animal Detection (dogs, cats, etc.)
+        group.enter()
+        let animalRequest = VNRecognizeAnimalsRequest { [self] request, error in
+            defer { group.leave() }
+            guard let results = request.results as? [VNRecognizedObjectObservation] else { return }
+            
+            lock.lock()
+            for animal in results.prefix(2) {
+                let rect = animal.boundingBox
+                let clockDir = self.rectToClockDirection(rect)
+                let distance = self.estimateDistance(from: rect)
+                
+                let animalType = animal.labels.first?.identifier ?? "Animal"
+                obstacles.append(Obstacle(
+                    type: .object,
+                    description: "\\(animalType) detected",
+                    clockDirection: clockDir,
+                    distanceMeters: distance,
+                    moving: true,
+                    approachDirection: .stationary,
+                    urgency: distance < 2 ? .immediate : (distance < 4 ? .soon : .ambient)
+                ))
+            }
+            lock.unlock()
+        }
+        
+        // 4. Rectangle Detection (signs, barriers, boxes, vehicles)
+        group.enter()
+        let rectangleRequest = VNDetectRectanglesRequest { [self] request, error in
+            defer { group.leave() }
+            guard let results = request.results as? [VNRectangleObservation] else { return }
+            
+            lock.lock()
+            // Only report large rectangles (likely obstacles)
+            for rect in results.prefix(3) {
+                let boundingBox = rect.boundingBox
+                
+                // Filter out small rectangles (probably not obstacles)
+                guard boundingBox.width > 0.15 && boundingBox.height > 0.15 else { continue }
+                
+                let clockDir = self.rectToClockDirection(boundingBox)
+                let distance = self.estimateDistance(from: boundingBox)
+                
+                // Determine type based on position and size
+                let obstacleType: ObstacleType
+                let description: String
+                
+                if boundingBox.minY < 0.3 {
+                    // Low object - likely ground obstacle
+                    obstacleType = .terrain
+                    description = "Ground obstacle"
+                } else if boundingBox.width > 0.5 {
+                    // Wide object - could be vehicle or barrier
+                    obstacleType = .barrier
+                    description = "Large obstacle or barrier"
+                } else {
+                    // Regular object
+                    obstacleType = .object
+                    description = "Object in path"
+                }
+                
+                obstacles.append(Obstacle(
+                    type: obstacleType,
+                    description: description,
+                    clockDirection: clockDir,
+                    distanceMeters: distance,
+                    moving: false,
+                    approachDirection: .stationary,
+                    urgency: distance < 2 ? .immediate : (distance < 4 ? .soon : .ambient)
+                ))
+            }
+            lock.unlock()
+        }
+        rectangleRequest.minimumAspectRatio = 0.2
+        rectangleRequest.maximumAspectRatio = 5.0
+        rectangleRequest.minimumConfidence = 0.6
+        rectangleRequest.minimumSize = 0.1
+        
+        // Perform all requests
+        do {
+            try handler.perform([humanRequest, faceRequest, animalRequest, rectangleRequest])
+        } catch {
+            print("OnDeviceObjectDetector: Vision request failed: \\(error)")
+        }
+        
+        // Wait for all async results
+        _ = group.wait(timeout: .now() + 0.5)
+        
+        // Remove duplicates (obstacles at same position)
+        let uniqueObstacles = removeDuplicateObstacles(obstacles)
+        
+        // Sort by urgency (immediate first)
+        let sortedObstacles = uniqueObstacles.sorted { $0.urgency.rawValue < $1.urgency.rawValue }
+        
+        // Determine if path is clear (no immediate or close obstacles in center)
+        let pathClear = !sortedObstacles.contains { 
+            ($0.clockDirection >= 11 || $0.clockDirection <= 1) && $0.distanceMeters < 4
+        }
         
         return DetectionResult(
-            obstacles: obstacles,
-            hasObstacles: !obstacles.isEmpty
+            obstacles: Array(sortedObstacles.prefix(5)),
+            hasObstacles: !sortedObstacles.isEmpty,
+            pathClear: pathClear
         )
+    }
+    
+    private func removeDuplicateObstacles(_ obstacles: [Obstacle]) -> [Obstacle] {
+        var unique: [Obstacle] = []
+        for obstacle in obstacles {
+            let isDuplicate = unique.contains {
+                abs($0.clockDirection - obstacle.clockDirection) <= 1 &&
+                abs($0.distanceMeters - obstacle.distanceMeters) < 2
+            }
+            if !isDuplicate {
+                unique.append(obstacle)
+            }
+        }
+        return unique
     }
     
     private func rectToClockDirection(_ rect: CGRect) -> Int {
         let centerX = rect.midX
         
-        if centerX < 0.33 {
-            return 9  // Left
-        } else if centerX > 0.67 {
-            return 3  // Right
-        } else {
-            return 12 // Center
-        }
+        if centerX < 0.2 { return 9 }       // Far left
+        if centerX < 0.35 { return 10 }     // Left
+        if centerX < 0.45 { return 11 }     // Slight left
+        if centerX < 0.55 { return 12 }     // Center
+        if centerX < 0.65 { return 1 }      // Slight right
+        if centerX < 0.8 { return 2 }       // Right
+        return 3                             // Far right
     }
     
     private func estimateDistance(from rect: CGRect) -> Float {
-        // Rough distance estimation based on bounding box size
+        // Distance estimation based on bounding box size
+        let size = max(rect.width, rect.height)
+        if size > 0.7 { return 1.0 }
+        if size > 0.5 { return 2.0 }
+        if size > 0.35 { return 3.0 }
+        if size > 0.25 { return 5.0 }
+        if size > 0.15 { return 8.0 }
+        return 12.0
+    }
+    
+    private func estimateDistanceFromPerson(from rect: CGRect) -> Float {
+        // Person-specific distance estimation (based on typical body proportions)
         let height = rect.height
-        if height > 0.7 { return 1.0 }
-        if height > 0.5 { return 2.0 }
-        if height > 0.3 { return 4.0 }
-        if height > 0.15 { return 8.0 }
-        return 15.0
+        if height > 0.8 { return 0.5 }   // Very close
+        if height > 0.6 { return 1.5 }   // Close
+        if height > 0.4 { return 3.0 }   // Medium
+        if height > 0.25 { return 5.0 }  // Far
+        if height > 0.15 { return 8.0 }  // Very far
+        return 12.0
+    }
+    
+    private func estimateDistanceFromFace(from rect: CGRect) -> Float {
+        // Face-specific distance estimation
+        let size = max(rect.width, rect.height)
+        if size > 0.4 { return 1.0 }
+        if size > 0.25 { return 2.0 }
+        if size > 0.15 { return 4.0 }
+        if size > 0.08 { return 6.0 }
+        return 10.0
     }
 }
 
