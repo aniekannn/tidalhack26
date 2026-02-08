@@ -1,0 +1,202 @@
+[
+  {
+    "issue_type": "Uneven Sidewalk",
+    "location": "University Drive near Texas A&M",
+    "description": "Cracked and uneven sidewalk sections near the main campus entrance. Tree root damage causing tripping hazards for pedestrians.",
+    "source": "Community Report",
+    "source_links": [],
+    "date": "2026-02-05",
+    "category": "Sidewalk",
+    "coordinates": [30.6187, -96.3365]
+  },
+  {
+    "issue_type": "Missing Curb Ramp",
+    "location": "Northgate District - College Main St",
+    "description": "Intersection lacks ADA-compliant curb ramps, making wheelchair access difficult. Multiple reports from students with mobility challenges.",
+    "source": "Student Accessibility Services",
+    "source_links": [],
+    "date": "2026-02-03",
+    "category": "Accessibility",
+    "coordinates": [30.6280, -96.3380]
+  },
+  {
+    "issue_type": "Poor Lighting",
+    "location": "Wellborn Road near George Bush Dr",
+    "description": "Street lights out along a 200-meter stretch. Pedestrians report safety concerns during evening hours.",
+    "source": "City of College Station",
+    "source_links": [],
+    "date": "2026-02-01",
+    "category": "Lighting",
+    "coordinates": [30.6120, -96.3400]
+  },
+  {
+    "issue_type": "Blocked Sidewalk",
+    "location": "Texas Ave near Post Oak Mall",
+    "description": "Construction equipment blocking sidewalk without proper pedestrian detour signs. Forces pedestrians onto busy roadway.",
+    "source": "Community Report",
+    "source_links": [],
+    "date": "2026-02-06",
+    "category": "Obstruction",
+    "coordinates": [30.6350, -96.3100]
+  },
+  {
+    "issue_type": "Pothole",
+    "location": "Harvey Road near Walmart",
+    "description": "Large pothole at crosswalk entrance causing water pooling and accessibility issues for wheelchair users.",
+    "source": "City Maintenance",
+    "source_links": [],
+    "date": "2026-01-28",
+    "category": "Road Damage",
+    "coordinates": [30.6420, -96.2950]
+  },
+  {
+    "issue_type": "Missing Ramp",
+    "location": "Downtown Bryan - Main Street",
+    "description": "Historic downtown area lacks modern accessibility ramps at several storefronts. Difficult access for mobility-impaired visitors.",
+    "source": "Bryan Downtown Association",
+    "source_links": [],
+    "date": "2026-01-25",
+    "category": "Accessibility",
+    "coordinates": [30.6744, -96.3700]
+  },
+  {
+    "issue_type": "Uneven Surface",
+    "location": "Kyle Field Pedestrian Area",
+    "description": "Brick pavers near stadium becoming uneven due to settling. Multiple tripping incidents reported during game days.",
+    "source": "Texas A&M Facilities",
+    "source_links": [],
+    "date": "2026-02-02",
+    "category": "Sidewalk",
+    "coordinates": [30.6100, -96.3400]
+  },
+  {
+    "issue_type": "Poor Lighting",
+    "location": "Wolf Pen Creek Trail",
+    "description": "Trail lighting inadequate near the amphitheater area. Evening joggers and walkers report visibility concerns.",
+    "source": "Parks & Recreation",
+    "source_links": [],
+    "date": "2026-01-30",
+    "category": "Lighting",
+    "coordinates": [30.6230, -96.3050]
+  },
+  {
+    "issue_type": "Blocked Sidewalk",
+    "location": "Holleman Drive near HEB",
+    "description": "Overgrown vegetation from adjacent property blocking sidewalk path. Reduces accessible width significantly.",
+    "source": "Community Report",
+    "source_links": [],
+    "date": "2026-02-04",
+    "category": "Obstruction",
+    "coordinates": [30.5980, -96.3200]
+  },
+  {
+    "issue_type": "Construction Zone",
+    "location": "Texas Ave & University Dr Intersection",
+    "description": "Major road construction creating confusing pedestrian routing. Temporary crosswalks poorly marked.",
+    "source": "TxDOT",
+    "source_links": [],
+    "date": "2026-02-07",
+    "category": "Construction",
+    "coordinates": [30.6280, -96.3344]
+  },
+  {
+    "issue_type": "Missing Curb Ramp",
+    "location": "George Bush Library Area",
+    "description": "Parking lot exits to sidewalk lack proper accessibility transitions for wheelchairs and strollers.",
+    "source": "Visitor Services",
+    "source_links": [],
+    "date": "2026-01-22",
+    "category": "Accessibility",
+    "coordinates": [30.5875, -96.3545]
+  },
+  {
+    "issue_type": "Uneven Sidewalk",
+    "location": "Boyett Street - Northgate",
+    "description": "Popular pedestrian area with significant sidewalk deterioration. Heavy foot traffic from nearby bars and restaurants.",
+    "source": "Community Report",
+    "source_links": [],
+    "date": "2026-02-05",
+    "category": "Sidewalk",
+    "coordinates": [30.6292, -96.3370]
+  },
+  {
+    "issue_type": "Poor Lighting",
+    "location": "Research Park near RELLIS Campus",
+    "description": "New development area with incomplete street lighting installation. Workers report dark conditions during early morning hours.",
+    "source": "Research Park Management",
+    "source_links": [],
+    "date": "2026-01-20",
+    "category": "Lighting",
+    "coordinates": [30.6150, -96.4700]
+  },
+  {
+    "issue_type": "Blocked Sidewalk",
+    "location": "Southwest Parkway near Kroger",
+    "description": "Delivery trucks regularly block sidewalk access during restocking. No designated loading zone available.",
+    "source": "Community Report",
+    "source_links": [],
+    "date": "2026-02-06",
+    "category": "Obstruction",
+    "coordinates": [30.5850, -96.3650]
+  },
+  {
+    "issue_type": "Pothole",
+    "location": "Earl Rudder Freeway Service Road",
+    "description": "Multiple potholes at pedestrian crossing area. Water accumulation creates splash hazard from passing vehicles.",
+    "source": "City Maintenance",
+    "source_links": [],
+    "date": "2026-01-29",
+    "category": "Road Damage",
+    "coordinates": [30.6400, -96.3200]
+  },
+  {
+    "issue_type": "Missing Signage",
+    "location": "Bee Creek Park Trails",
+    "description": "Trail intersection markers missing or faded. Visitors report getting lost on multi-use trail system.",
+    "source": "Parks & Recreation",
+    "source_links": [],
+    "date": "2026-01-27",
+    "category": "Signage",
+    "coordinates": [30.5700, -96.3350]
+  },
+  {
+    "issue_type": "Uneven Surface",
+    "location": "Century Square Shopping Center",
+    "description": "Decorative pavement near outdoor dining becoming hazardous. Settling causing uneven walking surfaces.",
+    "source": "Property Management",
+    "source_links": [],
+    "date": "2026-02-01",
+    "category": "Sidewalk",
+    "coordinates": [30.6050, -96.3150]
+  },
+  {
+    "issue_type": "Poor Lighting",
+    "location": "Finfeather Road near apartments",
+    "description": "Student housing area with insufficient pathway lighting. Multiple safety concerns reported by residents.",
+    "source": "Apartment Complex",
+    "source_links": [],
+    "date": "2026-02-03",
+    "category": "Lighting",
+    "coordinates": [30.5920, -96.3050]
+  },
+  {
+    "issue_type": "Missing Curb Ramp",
+    "location": "Rock Prairie Road & Highway 6",
+    "description": "High-traffic intersection missing accessible pedestrian crossing features on south corner.",
+    "source": "City of College Station",
+    "source_links": [],
+    "date": "2026-01-18",
+    "category": "Accessibility",
+    "coordinates": [30.5650, -96.2900]
+  },
+  {
+    "issue_type": "Blocked Sidewalk",
+    "location": "Marion Pugh Drive near Rec Center",
+    "description": "Parked scooters and bikes frequently blocking pedestrian path. Creates obstacles for visually impaired users.",
+    "source": "Texas A&M Transportation",
+    "source_links": [],
+    "date": "2026-02-07",
+    "category": "Obstruction",
+    "coordinates": [30.6080, -96.3480]
+  }
+]

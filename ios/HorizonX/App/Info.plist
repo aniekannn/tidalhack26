@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>HorizonX</string>
+    <key>CFBundleDisplayName</key>
+    <string>HorizonX</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.horizonx.app</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>armv7</string>
+        <string>camera</string>
+        <string>location-services</string>
+        <string>microphone</string>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+
+    <!-- Privacy Permission Descriptions (Required by App Store) -->
+    <key>NSCameraUsageDescription</key>
+    <string>HorizonX needs camera access to describe your surroundings and detect obstacles for navigation assistance.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>HorizonX needs microphone access for voice commands so you can interact hands-free.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>HorizonX uses speech recognition to understand your voice commands for navigation and hazard reporting.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>HorizonX uses your approximate location to provide navigation guidance and report hazards in your area. Location is always fuzzed for privacy.</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>HorizonX uses background location to continue providing navigation assistance while the screen is off.</string>
+
+    <!-- Audio background mode for continuous narration -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>location</string>
+    </array>
+</dict>
+</plist>

@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WayFinder Civic Dashboard</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet MarkerCluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #1a1d27;
+            --bg-card: #222533;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --accent-blue: #4a90d9;
+            --accent-green: #34a853;
+            --accent-yellow: #fbbc04;
+            --accent-red: #ea4335;
+            --accent-purple: #a855f7;
+            --border: #2d3140;
+            --shadow: rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        /* ─── Header ─────────────────────────────────────── */
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .header h1 span {
+            color: var(--accent-blue);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .live-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(234, 67, 53, 0.15);
+            border: 1px solid rgba(234, 67, 53, 0.3);
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--accent-red);
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-red);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover { border-color: var(--accent-blue); }
+        .filter-btn.active { background: var(--accent-blue); border-color: var(--accent-blue); }
+
+        /* ─── Layout ─────────────────────────────────────── */
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            grid-template-rows: auto 1fr;
+            height: calc(100vh - 69px);
+        }
+
+        /* ─── Stats Bar ──────────────────────────────────── */
+
+        .stats-bar {
+            grid-column: 1 / -1;
+            display: flex;
+            gap: 16px;
+            padding: 16px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .stat-card {
+            flex: 1;
+            min-width: 160px;
+            padding: 16px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .stat-change.up { color: var(--accent-red); }
+        .stat-change.down { color: var(--accent-green); }
+
+        /* ─── Map ────────────────────────────────────────── */
+
+        .map-container {
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background: var(--bg-primary);
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 500;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .hazard-filter {
+            padding: 6px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .hazard-filter:hover, .hazard-filter.active {
+            border-color: var(--accent-blue);
+            color: var(--text-primary);
+            background: rgba(74, 144, 217, 0.15);
+        }
+
+        .hazard-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        /* ─── Sidebar ────────────────────────────────────── */
+
+        .sidebar {
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-section {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-title {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        /* ─── Hazard List ────────────────────────────────── */
+
+        .hazard-item {
+            padding: 14px;
+            background: var(--bg-card);
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .hazard-item:hover {
+            border-color: var(--accent-blue);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .hazard-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .hazard-type-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-low { background: rgba(52, 168, 83, 0.15); color: var(--accent-green); }
+        .severity-medium { background: rgba(251, 188, 4, 0.15); color: var(--accent-yellow); }
+        .severity-high { background: rgba(234, 67, 53, 0.15); color: var(--accent-red); }
+        .severity-critical { background: rgba(234, 67, 53, 0.3); color: #ff6b6b; }
+
+        .hazard-reports {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .hazard-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 8px;
+        }
+
+        .hazard-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .status-badge {
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pending { background: rgba(251, 188, 4, 0.15); color: var(--accent-yellow); }
+        .status-confirmed { background: rgba(74, 144, 217, 0.15); color: var(--accent-blue); }
+        .status-investigating { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); }
+        .status-resolved { background: rgba(52, 168, 83, 0.15); color: var(--accent-green); }
+
+        /* ─── Severity Chart ─────────────────────────────── */
+
+        .severity-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .severity-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .severity-bar-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            width: 60px;
+            text-transform: capitalize;
+        }
+
+        .severity-bar-track {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .severity-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 1s ease;
+        }
+
+        .severity-bar-count {
+            font-size: 12px;
+            font-weight: 600;
+            width: 30px;
+            text-align: right;
+        }
+
+        /* ─── Accessibility Scores ───────────────────────── */
+
+        .score-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .score-item:last-child { border-bottom: none; }
+
+        .score-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .score-good { background: rgba(52, 168, 83, 0.15); color: var(--accent-green); border: 2px solid var(--accent-green); }
+        .score-fair { background: rgba(251, 188, 4, 0.15); color: var(--accent-yellow); border: 2px solid var(--accent-yellow); }
+        .score-poor { background: rgba(234, 67, 53, 0.15); color: var(--accent-red); border: 2px solid var(--accent-red); }
+
+        .score-info { flex: 1; }
+        .score-name { font-size: 14px; font-weight: 500; }
+        .score-issues { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+        /* ─── Leaflet dark theme overrides ────────────────── */
+        .leaflet-container { background: #1a1d27 !important; }
+        .leaflet-popup-content-wrapper { background: var(--bg-card); color: var(--text-primary); border-radius: 12px; }
+        .leaflet-popup-tip { background: var(--bg-card); }
+        .leaflet-control-zoom a { background: var(--bg-card) !important; color: var(--text-primary) !important; border-color: var(--border) !important; }
+    </style>
+</head>
+<body>
+
+<!-- ─── Header ──────────────────────────────────────── -->
+<header class="header">
+    <div class="header-left">
+        <div class="logo">Wf</div>
+        <h1>Way<span>Finder</span> Civic Dashboard</h1>
+    </div>
+    <div class="header-right">
+        <div class="live-badge">
+            <div class="live-dot"></div>
+            LIVE
+        </div>
+        <button class="filter-btn active" onclick="setTimeRange('24h')">24H</button>
+        <button class="filter-btn" onclick="setTimeRange('7d')">7D</button>
+        <button class="filter-btn" onclick="setTimeRange('30d')">30D</button>
+    </div>
+</header>
+
+<!-- ─── Stats Bar ───────────────────────────────────── -->
+<div class="main-layout">
+    <div class="stats-bar">
+        <div class="stat-card">
+            <div class="stat-label">Total Reports</div>
+            <div class="stat-value" id="stat-total">247</div>
+            <div class="stat-change up">+12% from last week</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Clusters</div>
+            <div class="stat-value" id="stat-clusters">5</div>
+            <div class="stat-change up">+2 new today</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Reports (24h)</div>
+            <div class="stat-value" id="stat-24h">23</div>
+            <div class="stat-change down">-8% from yesterday</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Resolution Rate</div>
+            <div class="stat-value" id="stat-resolution">34%</div>
+            <div class="stat-change down">+5% this month</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Avg Response Time</div>
+            <div class="stat-value">2.3d</div>
+            <div class="stat-change down">-0.5d improvement</div>
+        </div>
+    </div>
+
+    <!-- ─── Map ─────────────────────────────────────── -->
+    <div class="map-container">
+        <div class="map-overlay">
+            <div class="hazard-filter active" data-type="all" onclick="filterHazards('all')">
+                <span class="hazard-dot" style="background: var(--accent-blue)"></span> All
+            </div>
+            <div class="hazard-filter" data-type="pothole" onclick="filterHazards('pothole')">
+                <span class="hazard-dot" style="background: #ea4335"></span> Potholes
+            </div>
+            <div class="hazard-filter" data-type="blocked_sidewalk" onclick="filterHazards('blocked_sidewalk')">
+                <span class="hazard-dot" style="background: #fbbc04"></span> Blocked
+            </div>
+            <div class="hazard-filter" data-type="missing_ramp" onclick="filterHazards('missing_ramp')">
+                <span class="hazard-dot" style="background: #a855f7"></span> Ramps
+            </div>
+            <div class="hazard-filter" data-type="poor_lighting" onclick="filterHazards('poor_lighting')">
+                <span class="hazard-dot" style="background: #34a853"></span> Lighting
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+
+    <!-- ─── Sidebar ─────────────────────────────────── -->
+    <div class="sidebar">
+        <!-- Active Hazards -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">Active Hazard Clusters</div>
+            <div id="hazard-list"></div>
+        </div>
+
+        <!-- Severity Breakdown -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">Severity Distribution</div>
+            <div class="severity-bars">
+                <div class="severity-bar-row">
+                    <span class="severity-bar-label">Critical</span>
+                    <div class="severity-bar-track">
+                        <div class="severity-bar-fill" style="width: 10.5%; background: var(--accent-red);"></div>
+                    </div>
+                    <span class="severity-bar-count">26</span>
+                </div>
+                <div class="severity-bar-row">
+                    <span class="severity-bar-label">High</span>
+                    <div class="severity-bar-track">
+                        <div class="severity-bar-fill" style="width: 22.7%; background: #ff8a65;"></div>
+                    </div>
+                    <span class="severity-bar-count">56</span>
+                </div>
+                <div class="severity-bar-row">
+                    <span class="severity-bar-label">Medium</span>
+                    <div class="severity-bar-track">
+                        <div class="severity-bar-fill" style="width: 39.7%; background: var(--accent-yellow);"></div>
+                    </div>
+                    <span class="severity-bar-count">98</span>
+                </div>
+                <div class="severity-bar-row">
+                    <span class="severity-bar-label">Low</span>
+                    <div class="severity-bar-track">
+                        <div class="severity-bar-fill" style="width: 27.1%; background: var(--accent-green);"></div>
+                    </div>
+                    <span class="severity-bar-count">67</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accessibility Scores -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">Accessibility Scores</div>
+            <div id="accessibility-scores"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ─── Scripts ──────────────────────────────────────── -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<script>
+// ─── Configuration ──────────────────────────────────────────────────────────
+
+const API_BASE = 'http://localhost:8000/api/v1';
+
+// Hazard data — loaded from backend API
+let HAZARD_CLUSTERS = [];
+
+// WebSocket for real-time updates
+let alertSocket = null;
+
+// Fetch hazard data from backend
+async function loadHazardData() {
+    try {
+        // Fetch pre-computed hazard data from treehack2025 integration
+        const response = await fetch(`${API_BASE}/alerts/hazard-data/`);
+        if (!response.ok) throw new Error('Failed to fetch hazard data');
+        
+        const hazardData = await response.json();
+        
+        // Transform to cluster format for map display
+        HAZARD_CLUSTERS = hazardData
+            .filter(h => h.latitude && h.longitude)
+            .map((h, idx) => ({
+                cluster_id: `hazard_${h.id}`,
+                center_lat: h.latitude,
+                center_lng: h.longitude,
+                radius_meters: 50,
+                hazard_type: mapIssueTypeToHazardType(h.issue_type),
+                avg_severity: estimateSeverity(h.issue_type, h.category),
+                report_count: 1,
+                latest_report: h.date ? new Date(h.date).toISOString() : new Date().toISOString(),
+                status: "confirmed",
+                description_summary: h.description || h.issue_type,
+                source: h.source,
+                location: h.location,
+                category: h.category,
+            }));
+        
+        console.log(`Loaded ${HAZARD_CLUSTERS.length} hazards from API`);
+        
+        // Update the map
+        addHazardMarkers(HAZARD_CLUSTERS);
+        renderHazardList(HAZARD_CLUSTERS);
+        updateStats();
+        
+        // Update connection status
+        document.querySelector('.live-badge').innerHTML = `
+            <span class="live-dot" style="background: var(--accent-green);"></span>
+            Connected
+        `;
+        
+    } catch (error) {
+        console.error('Error loading hazard data:', error);
+        document.querySelector('.live-badge').innerHTML = `
+            <span class="live-dot" style="background: var(--accent-red);"></span>
+            Offline
+        `;
+    }
+}
+
+// Map issue types to standard hazard types
+function mapIssueTypeToHazardType(issueType) {
+    const mapping = {
+        'Uneven Sidewalk': 'uneven_surface',
+        'Uneven Surface': 'uneven_surface',
+        'Missing Curb Ramp': 'missing_ramp',
+        'Missing Ramp': 'missing_ramp',
+        'Poor Lighting': 'poor_lighting',
+        'Blocked Sidewalk': 'blocked_sidewalk',
+        'Pothole': 'pothole',
+        'Construction Zone': 'construction',
+        'Missing Signage': 'broken_signage',
+        'Trash': 'trash',
+        'Large Obstruction': 'large_obstruction',
+        'Homeless Person': 'homeless_person',
+        'Person in Need': 'homeless_person',
+    };
+    return mapping[issueType] || 'other';
+}
+
+// Estimate severity from issue type and category
+function estimateSeverity(issueType, category) {
+    if (issueType.includes('Pothole')) return 3.0;
+    if (issueType.includes('Missing Curb Ramp') || issueType.includes('Missing Ramp')) return 3.5;
+    if (issueType.includes('Construction')) return 2.5;
+    if (issueType.includes('Poor Lighting')) return 2.5;
+    if (issueType.includes('Blocked')) return 2.0;
+    if (issueType.includes('Uneven')) return 2.0;
+    return 2.0;
+}
+
+// Update dashboard stats
+function updateStats() {
+    const totalReports = HAZARD_CLUSTERS.length;
+    const activeZones = new Set(HAZARD_CLUSTERS.map(h => h.location)).size;
+    
+    // Update stat cards
+    const statCards = document.querySelectorAll('.stat-value');
+    if (statCards.length >= 2) {
+        statCards[0].textContent = totalReports;
+        statCards[1].textContent = activeZones;
+    }
+}
+
+// Connect to WebSocket for real-time alerts
+function connectWebSocket() {
+    try {
+        alertSocket = new WebSocket('ws://localhost:8000/api/v1/alerts/ws');
+        
+        alertSocket.onopen = () => {
+            console.log('WebSocket connected for real-time alerts');
+        };
+        
+        alertSocket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'new_alert' || data.type === 'alert_public') {
+                console.log('New alert received:', data.alert);
+                // Reload data to include new alert
+                loadHazardData();
+            }
+        };
+        
+        alertSocket.onclose = () => {
+            console.log('WebSocket disconnected, reconnecting in 5s...');
+            setTimeout(connectWebSocket, 5000);
+        };
+        
+        alertSocket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+    } catch (error) {
+        console.error('Failed to connect WebSocket:', error);
+    }
+}
+
+const ACCESSIBILITY_SCORES = [
+    { area_name: "Northgate", score: 68, issues: ["uneven sidewalks", "poor lighting"] },
+    { area_name: "Texas A&M Campus", score: 75, issues: ["construction zones", "crowding"] },
+    { area_name: "Downtown Bryan", score: 55, issues: ["older infrastructure", "curb ramps"] },
+    { area_name: "Wolf Pen Creek", score: 72, issues: ["trail maintenance", "signage"] },
+];
+
+const HAZARD_COLORS = {
+    pothole: '#ea4335',
+    blocked_sidewalk: '#fbbc04',
+    missing_ramp: '#a855f7',
+    poor_lighting: '#34a853',
+    broken_signage: '#4a90d9',
+    construction: '#ff8a65',
+    uneven_surface: '#78909c',
+    crowd_density: '#f06292',
+    flooding: '#29b6f6',
+    trash: '#8d6e63',           // Brown for trash/debris
+    large_obstruction: '#ff5722', // Deep orange for large obstructions
+    homeless_person: '#ec407a',   // Pink for person in need
+    other: '#9aa0a6'
+};
+
+const SEVERITY_MAP = { 1: 'low', 1.5: 'low', 2: 'medium', 2.5: 'medium', 3: 'high', 3.5: 'high', 4: 'critical' };
+
+// ─── Map Initialization ─────────────────────────────────────────────────────
+
+// Center on College Station, TX
+const map = L.map('map', {
+    center: [30.6280, -96.3344],
+    zoom: 14,
+    zoomControl: true,
+});
+
+// Dark tile layer
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19,
+}).addTo(map);
+
+// Marker cluster group
+const markerCluster = L.markerClusterGroup({
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    maxClusterRadius: 50,
+    iconCreateFunction: function(cluster) {
+        const count = cluster.getChildCount();
+        let size = 'small';
+        if (count > 5) size = 'medium';
+        if (count > 10) size = 'large';
+        return L.divIcon({
+            html: `<div style="
+                background: rgba(74, 144, 217, 0.8);
+                color: white;
+                border-radius: 50%;
+                width: ${size === 'large' ? 50 : size === 'medium' ? 40 : 30}px;
+                height: ${size === 'large' ? 50 : size === 'medium' ? 40 : 30}px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 700;
+                font-size: ${size === 'large' ? 16 : 13}px;
+                border: 2px solid rgba(255,255,255,0.3);
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            ">${count}</div>`,
+            className: '',
+            iconSize: [size === 'large' ? 50 : size === 'medium' ? 40 : 30, size === 'large' ? 50 : size === 'medium' ? 40 : 30],
+        });
+    }
+});
+
+let allMarkers = [];
+
+function addHazardMarkers(hazards) {
+    markerCluster.clearLayers();
+    allMarkers = [];
+
+    hazards.forEach(h => {
+        const color = HAZARD_COLORS[h.hazard_type] || '#9aa0a6';
+        const severityLabel = h.avg_severity <= 1.5 ? 'Low' : h.avg_severity <= 2.5 ? 'Medium' : h.avg_severity <= 3.5 ? 'High' : 'Critical';
+        const severityClass = severityLabel.toLowerCase();
+
+        const icon = L.divIcon({
+            html: `<div style="
+                background: ${color};
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                border: 3px solid rgba(255,255,255,0.4);
+                box-shadow: 0 0 12px ${color}88;
+            "></div>`,
+            className: '',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
+        });
+
+        const marker = L.marker([h.center_lat, h.center_lng], { icon })
+            .bindPopup(`
+                <div style="min-width: 220px;">
+                    <strong style="font-size: 14px;">${formatHazardType(h.hazard_type)}</strong>
+                    <span class="status-badge status-${h.status}" style="margin-left: 8px; padding: 2px 8px; border-radius: 8px; font-size: 10px;">${h.status}</span>
+                    <p style="margin: 8px 0; font-size: 13px; color: #9aa0a6; line-height: 1.4;">${h.description_summary}</p>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666;">
+                        <span>${h.report_count} reports</span>
+                        <span>Severity: ${severityLabel}</span>
+                    </div>
+                </div>
+            `);
+
+        marker._hazardType = h.hazard_type;
+        allMarkers.push(marker);
+        markerCluster.addLayer(marker);
+    });
+
+    map.addLayer(markerCluster);
+
+    // Add radius circles
+    hazards.forEach(h => {
+        const color = HAZARD_COLORS[h.hazard_type] || '#9aa0a6';
+        L.circle([h.center_lat, h.center_lng], {
+            radius: h.radius_meters,
+            color: color,
+            fillColor: color,
+            fillOpacity: 0.1,
+            weight: 1,
+            opacity: 0.3,
+        }).addTo(map);
+    });
+}
+
+// ─── Hazard List ────────────────────────────────────────────────────────────
+
+function renderHazardList(hazards) {
+    const container = document.getElementById('hazard-list');
+    container.innerHTML = hazards.map(h => {
+        const severityLabel = h.avg_severity <= 1.5 ? 'Low' : h.avg_severity <= 2.5 ? 'Medium' : h.avg_severity <= 3.5 ? 'High' : 'Critical';
+        const severityClass = severityLabel.toLowerCase();
+        const timeAgo = getTimeAgo(new Date(h.latest_report));
+
+        return `
+            <div class="hazard-item" onclick="flyToHazard(${h.center_lat}, ${h.center_lng})">
+                <div class="hazard-item-header">
+                    <span class="hazard-type-badge severity-${severityClass}">
+                        ${formatHazardType(h.hazard_type)}
+                    </span>
+                    <span class="hazard-reports">${h.report_count} reports</span>
+                </div>
+                <div class="hazard-description">${h.description_summary}</div>
+                <div class="hazard-meta">
+                    <span class="status-badge status-${h.status}">${h.status}</span>
+                    <span>${timeAgo}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ─── Accessibility Scores ───────────────────────────────────────────────────
+
+function renderAccessibilityScores(scores) {
+    const container = document.getElementById('accessibility-scores');
+    container.innerHTML = scores.map(s => {
+        const scoreClass = s.score >= 70 ? 'score-good' : s.score >= 55 ? 'score-fair' : 'score-poor';
+        return `
+            <div class="score-item">
+                <div class="score-circle ${scoreClass}">${s.score}</div>
+                <div class="score-info">
+                    <div class="score-name">${s.area_name}</div>
+                    <div class="score-issues">${s.issues.join(', ')}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ─── Interactions ───────────────────────────────────────────────────────────
+
+function flyToHazard(lat, lng) {
+    map.flyTo([lat, lng], 15, { duration: 1.5 });
+}
+
+function filterHazards(type) {
+    document.querySelectorAll('.hazard-filter').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.hazard-filter[data-type="${type}"]`).classList.add('active');
+
+    const filtered = type === 'all'
+        ? HAZARD_CLUSTERS
+        : HAZARD_CLUSTERS.filter(h => h.hazard_type === type);
+
+    addHazardMarkers(filtered);
+    renderHazardList(filtered);
+}
+
+function setTimeRange(range) {
+    document.querySelectorAll('.filter-btn').forEach(el => el.classList.remove('active'));
+    event.target.classList.add('active');
+    // In production: refetch data with time range filter
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function formatHazardType(type) {
+    // Custom labels for specific types
+    const labels = {
+        'homeless_person': 'Person in Need',
+        'large_obstruction': 'Large Obstruction',
+        'trash': 'Trash/Debris',
+        'blocked_sidewalk': 'Blocked Sidewalk',
+        'missing_ramp': 'Missing Ramp',
+        'uneven_surface': 'Uneven Surface',
+        'poor_lighting': 'Poor Lighting',
+        'broken_signage': 'Broken Signage',
+    };
+    return labels[type] || type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+// ─── Initialize ─────────────────────────────────────────────────────────────
+
+// Load real data from backend API
+loadHazardData();
+renderAccessibilityScores(ACCESSIBILITY_SCORES);
+
+// Connect to WebSocket for real-time updates
+connectWebSocket();
+
+// Auto-refresh every 30 seconds
+setInterval(loadHazardData, 30000);
+
+// Live indicator animation
+setInterval(() => {
+    const dot = document.querySelector('.live-dot');
+    if (dot) {
+        dot.style.opacity = dot.style.opacity === '0.5' ? '1' : '0.5';
+    }
+}, 1500);
+</script>
+
+</body>
+</html>

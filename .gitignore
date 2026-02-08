@@ -1,0 +1,39 @@
+# ─── Python ────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+
+# ─── Android ──────────────────────────────────────
+*.iml
+.gradle/
+local.properties
+.idea/
+*.apk
+*.aab
+build/
+
+# ─── Environment ─────────────────────────────────
+.env
+.env.local
+.env.production
+
+# ─── IDE ──────────────────────────────────────────
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# ─── ML Models (too large for git) ───────────────
+*.tflite
+*.onnx
+*.bin
+models/
+
+# ─── Node (dashboard dev) ────────────────────────
+node_modules/
