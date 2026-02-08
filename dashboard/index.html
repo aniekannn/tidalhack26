@@ -432,9 +432,9 @@
             <div class="stat-change up">+2 new today</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">Reports (24h)</div>
-            <div class="stat-value" id="stat-24h">23</div>
-            <div class="stat-change down">-8% from yesterday</div>
+            <div class="stat-label">User Reports</div>
+            <div class="stat-value" id="stat-user-reports" style="color: var(--accent-purple);">0</div>
+            <div class="stat-change">📱 From WayFinder App</div>
         </div>
         <div class="stat-card">
             <div class="stat-label">Resolution Rate</div>
@@ -476,6 +476,12 @@
         <div class="sidebar-section">
             <div class="sidebar-title">Active Hazard Clusters</div>
             <div id="hazard-list"></div>
+        </div>
+
+        <!-- User Reports -->
+        <div class="sidebar-section">
+            <div class="sidebar-title">User Reports <span id="user-reports-count" style="font-size: 11px; color: var(--accent-purple);">(0)</span></div>
+            <div id="user-reports-list"></div>
         </div>
 
         <!-- Severity Breakdown -->
@@ -533,6 +539,9 @@ const API_BASE = 'http://localhost:8000/api/v1';
 // Hazard data — loaded from backend API
 let HAZARD_CLUSTERS = [];
 
+// User reports from app — loaded from backend API
+let USER_REPORTS = [];
+
 // WebSocket for real-time updates
 let alertSocket = null;
 
@@ -583,6 +592,41 @@ async function loadHazardData() {
             <span class="live-dot" style="background: var(--accent-red);"></span>
             Offline
         `;
+    }
+}
+
+// Fetch user reports from backend (reports submitted via the app)
+async function loadUserReports() {
+    try {
+        const response = await fetch(`${API_BASE}/alerts/`);
+        if (!response.ok) throw new Error('Failed to fetch user reports');
+        
+        const reports = await response.json();
+        
+        // Store user reports
+        USER_REPORTS = reports.map(r => ({
+            id: r.id,
+            latitude: r.latitude,
+            longitude: r.longitude,
+            report_type: r.report_type,
+            description: r.description || r.report_type,
+            severity: r.severity,
+            confidence: r.confidence,
+            objects_detected: r.objects_detected || [],
+            is_public: r.is_public,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }));
+        
+        console.log(`Loaded ${USER_REPORTS.length} user reports from API`);
+        
+        // Update the map and sidebar
+        addUserReportMarkers(USER_REPORTS);
+        renderUserReportsList(USER_REPORTS);
+        updateUserReportsCount();
+        
+    } catch (error) {
+        console.error('Error loading user reports:', error);
     }
 }
 
@@ -645,6 +689,7 @@ function connectWebSocket() {
                 console.log('New alert received:', data.alert);
                 // Reload data to include new alert
                 loadHazardData();
+                loadUserReports();
             }
         };
         
@@ -791,6 +836,59 @@ function addHazardMarkers(hazards) {
     });
 }
 
+// User report markers group (separate from hazard clusters)
+let userReportMarkers = L.layerGroup().addTo(map);
+
+function addUserReportMarkers(reports) {
+    userReportMarkers.clearLayers();
+    
+    reports.forEach(r => {
+        const severityLabel = r.severity <= 2 ? 'Low' : r.severity <= 3 ? 'Medium' : r.severity <= 4 ? 'High' : 'Critical';
+        const confidencePercent = Math.round(r.confidence * 100);
+        
+        // Purple-themed markers for user reports to distinguish from hazard data
+        const icon = L.divIcon({
+            html: `<div style="
+                background: var(--accent-purple);
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                border: 3px solid rgba(255,255,255,0.6);
+                box-shadow: 0 0 15px rgba(168, 85, 247, 0.6);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 10px;
+            ">📱</div>`,
+            className: '',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+        });
+        
+        const marker = L.marker([r.latitude, r.longitude], { icon })
+            .bindPopup(`
+                <div style="min-width: 240px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 16px;">📱</span>
+                        <strong style="font-size: 14px; color: var(--accent-purple);">User Report</strong>
+                    </div>
+                    <div style="font-weight: 600; margin-bottom: 6px;">${formatReportType(r.report_type)}</div>
+                    <p style="margin: 8px 0; font-size: 13px; color: #9aa0a6; line-height: 1.4;">${r.description || 'No description provided'}</p>
+                    ${r.objects_detected && r.objects_detected.length > 0 ? `<p style="font-size: 12px; color: #888;">🔍 Detected: ${r.objects_detected.join(', ')}</p>` : ''}
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-top: 8px;">
+                        <span>Severity: ${severityLabel}</span>
+                        <span>AI Confidence: ${confidencePercent}%</span>
+                    </div>
+                    <div style="font-size: 11px; color: #555; margin-top: 6px;">
+                        ${r.is_public ? '🌐 Public' : '🔒 Private'} • ${getTimeAgo(new Date(r.created_at))}
+                    </div>
+                </div>
+            `);
+        
+        userReportMarkers.addLayer(marker);
+    });
+}
+
 // ─── Hazard List ────────────────────────────────────────────────────────────
 
 function renderHazardList(hazards) {
@@ -816,6 +914,68 @@ function renderHazardList(hazards) {
             </div>
         `;
     }).join('');
+}
+
+// ─── User Reports List ──────────────────────────────────────────────────────
+
+function renderUserReportsList(reports) {
+    const container = document.getElementById('user-reports-list');
+    
+    if (reports.length === 0) {
+        container.innerHTML = `
+            <div style="padding: 20px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                No user reports yet. Reports from the WayFinder app will appear here.
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = reports.map(r => {
+        const severityLabel = r.severity <= 2 ? 'Low' : r.severity <= 3 ? 'Medium' : r.severity <= 4 ? 'High' : 'Critical';
+        const severityClass = severityLabel.toLowerCase();
+        const timeAgo = getTimeAgo(new Date(r.created_at));
+        const publicBadge = r.is_public ? '<span class="status-badge status-confirmed">Public</span>' : '<span class="status-badge status-pending">Private</span>';
+        const confidencePercent = Math.round(r.confidence * 100);
+
+        return `
+            <div class="hazard-item user-report" onclick="flyToHazard(${r.latitude}, ${r.longitude})" style="border-left: 3px solid var(--accent-purple);">
+                <div class="hazard-item-header">
+                    <span class="hazard-type-badge severity-${severityClass}">
+                        ${formatReportType(r.report_type)}
+                    </span>
+                    <span style="font-size: 11px; color: var(--accent-purple);">📱 App</span>
+                </div>
+                <div class="hazard-description">${r.description || 'No description'}</div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 6px;">
+                    ${r.objects_detected && r.objects_detected.length > 0 ? '🔍 ' + r.objects_detected.slice(0, 3).join(', ') : ''}
+                </div>
+                <div class="hazard-meta">
+                    ${publicBadge}
+                    <span style="display: flex; align-items: center; gap: 4px;">
+                        <span style="font-size: 10px;">AI: ${confidencePercent}%</span>
+                        <span>${timeAgo}</span>
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function formatReportType(type) {
+    if (!type) return 'Unknown';
+    return type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function updateUserReportsCount() {
+    const countEl = document.getElementById('user-reports-count');
+    if (countEl) {
+        countEl.textContent = `(${USER_REPORTS.length})`;
+    }
+    // Also update the stat card
+    const statEl = document.getElementById('stat-user-reports');
+    if (statEl) {
+        statEl.textContent = USER_REPORTS.length;
+    }
 }
 
 // ─── Accessibility Scores ───────────────────────────────────────────────────
@@ -888,13 +1048,17 @@ function getTimeAgo(date) {
 
 // Load real data from backend API
 loadHazardData();
+loadUserReports();
 renderAccessibilityScores(ACCESSIBILITY_SCORES);
 
 // Connect to WebSocket for real-time updates
 connectWebSocket();
 
 // Auto-refresh every 30 seconds
-setInterval(loadHazardData, 30000);
+setInterval(() => {
+    loadHazardData();
+    loadUserReports();
+}, 30000);
 
 // Live indicator animation
 setInterval(() => {

@@ -11,8 +11,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from app.database import get_db
 
 # Import schemas (shared with mobile via schemas/ directory)
 import sys
@@ -91,12 +93,15 @@ async def submit_hazard_report(report: HazardReportCreate):
 
 
 @router.post("/sync", response_model=BatchSyncResponse)
-async def batch_sync_reports(batch: BatchSyncRequest):
+async def batch_sync_reports(batch: BatchSyncRequest, db: Session = Depends(get_db)):
     """
     Batch sync queued offline reports.
     Mobile app calls this when connectivity is restored.
     Max 50 reports per batch.
+    Also creates alerts in the database for dashboard display.
     """
+    from app.models.alerts import Alert
+    
     accepted_ids = []
     rejected = 0
     
@@ -111,8 +116,34 @@ async def batch_sync_reports(batch: BatchSyncRequest):
             )
             _hazard_store.append(stored)
             accepted_ids.append(stored.id)
-        except Exception:
+            
+            # Also create an Alert record for dashboard display
+            severity_map = {"low": 2, "medium": 3, "high": 4, "critical": 5}
+            severity_int = severity_map.get(report.severity.lower(), 3)
+            
+            db_alert = Alert(
+                latitude=report.location.latitude,
+                longitude=report.location.longitude,
+                report_type=report.hazard_type,
+                description=report.description,
+                severity=severity_int,
+                confidence=report.confidence,
+                objects_detected=report.context_tags,
+                device_hash=report.device_hash,
+                is_public=True,  # Make visible on dashboard
+            )
+            db.add(db_alert)
+            
+        except Exception as e:
+            print(f"Error processing hazard report: {e}")
             rejected += 1
+    
+    # Commit all alerts at once
+    try:
+        db.commit()
+    except Exception as e:
+        print(f"Error committing alerts to database: {e}")
+        db.rollback()
     
     return BatchSyncResponse(
         accepted=len(accepted_ids),

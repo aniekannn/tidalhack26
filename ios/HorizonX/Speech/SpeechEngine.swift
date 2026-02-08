@@ -339,11 +339,11 @@ final class SpeechEngine: NSObject, ObservableObject {
     
     private func configureAudioSession() {
         do {
-            // Duck other audio (lower volume) during speech
+            // Use playAndRecord to allow both speech output and voice recognition input
             try audioSession.setCategory(
-                .playback,
+                .playAndRecord,
                 mode: .voicePrompt,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+                options: [.duckOthers, .defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
             )
         } catch {
             print("Audio session configuration failed: \(error)")
@@ -356,6 +356,34 @@ final class SpeechEngine: NSObject, ObservableObject {
     
     private func deactivateAudioSession() {
         try? audioSession.setActive(false, options: [.notifyOthersOnDeactivation])
+    }
+    
+    /// Prepare audio session for voice recognition input
+    /// Call this before starting speech recognition to ensure proper audio routing
+    func prepareForRecording() {
+        do {
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .measurement,
+                options: [.duckOthers, .defaultToSpeaker, .allowBluetooth]
+            )
+            try audioSession.setActive(true, options: [.notifyOthersOnDeactivation])
+        } catch {
+            print("Failed to prepare audio session for recording: \(error)")
+        }
+    }
+    
+    /// Restore audio session for speech output after recording
+    func restoreForSpeech() {
+        do {
+            try audioSession.setCategory(
+                .playAndRecord,
+                mode: .voicePrompt,
+                options: [.duckOthers, .defaultToSpeaker, .allowBluetooth, .allowBluetoothA2DP]
+            )
+        } catch {
+            print("Failed to restore audio session for speech: \(error)")
+        }
     }
 }
 

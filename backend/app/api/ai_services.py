@@ -424,30 +424,32 @@ async def generate_speech(request: TTSRequest):
     
     if eleven_client and ELEVENLABS_API_KEY:
         try:
-            # Generate audio using ElevenLabs with raw response for headers
-            response = eleven_client.text_to_speech.with_raw_response.convert(
+            # Map voice names to IDs (or use provided ID)
+            voice_map = {
+                "aria": "EXAVITQu4vr4xnSDxMaL",  # Sarah - Mature, Reassuring
+                "sarah": "EXAVITQu4vr4xnSDxMaL",
+                "roger": "CwhRBWXzGAHq8TQ4Fs17",
+                "river": "SAz9YHcvj6GT2YYXdXww",  # Relaxed, Neutral
+            }
+            voice_id = voice_map.get(request.voice_id, request.voice_id) if request.voice_id else "EXAVITQu4vr4xnSDxMaL"
+            
+            # Generate audio using ElevenLabs
+            audio = eleven_client.text_to_speech.convert(
                 text=request.text,
-                voice_id=request.voice_id or "pFZP5JQG7iQjIQuC4Bku",  # Lily voice (calm, clear)
+                voice_id=voice_id,
                 model_id="eleven_turbo_v2_5",
                 output_format="mp3_22050_32",
             )
             
-            # Access character cost and request ID from headers
-            char_cost = response.headers.get("x-character-count")
-            request_id = response.headers.get("request-id")
-            
-            # Get audio data from response
-            audio_bytes = response.data
-            
-            # If audio_bytes is a generator, collect it
-            if hasattr(audio_bytes, '__iter__') and not isinstance(audio_bytes, bytes):
-                audio_bytes = b"".join(audio_bytes)
+            # Collect audio bytes from generator
+            if hasattr(audio, '__iter__') and not isinstance(audio, bytes):
+                audio_bytes = b"".join(audio)
+            else:
+                audio_bytes = audio
             
             latency = int((time.time() - start) * 1000)
             
-            # Log usage for tracking
-            if char_cost:
-                print(f"ElevenLabs TTS: {char_cost} characters used (request: {request_id})")
+            print(f"ElevenLabs TTS: {len(request.text)} characters, {len(audio_bytes)} bytes")
             
             # Store temporarily and return URL
             audio_hash = abs(hash(request.text)) % (10 ** 10)
@@ -508,10 +510,19 @@ async def generate_speech_stream(request: TTSRequest):
         )
     
     try:
+        # Map voice names to IDs
+        voice_map = {
+            "aria": "EXAVITQu4vr4xnSDxMaL",  # Sarah - Mature, Reassuring
+            "sarah": "EXAVITQu4vr4xnSDxMaL",
+            "roger": "CwhRBWXzGAHq8TQ4Fs17",
+            "river": "SAz9YHcvj6GT2YYXdXww",  # Relaxed, Neutral
+        }
+        voice_id = voice_map.get(request.voice_id, request.voice_id) if request.voice_id else "EXAVITQu4vr4xnSDxMaL"
+        
         # Use streaming endpoint for real-time audio
         audio_stream = eleven_client.text_to_speech.stream(
             text=request.text,
-            voice_id=request.voice_id or "pFZP5JQG7iQjIQuC4Bku",  # Lily voice
+            voice_id=voice_id,
             model_id="eleven_turbo_v2_5",
             output_format="mp3_22050_32",
         )

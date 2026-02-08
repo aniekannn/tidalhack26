@@ -1,8 +1,8 @@
 """
 HorizonX — Vision API Router
 
-MoonDream-based video/image analysis endpoints.
-Based on treehack2025/moondream/main.py
+Gemini Vision-based video/image analysis endpoints.
+Falls back to MoonDream when Gemini is unavailable.
 
 Endpoints:
   - POST /process-frame       Process a single image frame
@@ -19,7 +19,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Form
 from pydantic import BaseModel, Field
 
-from app.services.vision_analyzer import get_video_analyzer, MOONDREAM_AVAILABLE
+from app.services.vision_analyzer import get_video_analyzer, MOONDREAM_AVAILABLE, GEMINI_AVAILABLE
 
 router = APIRouter()
 
@@ -64,7 +64,9 @@ async def vision_status():
     analyzer = get_video_analyzer()
     return {
         "available": analyzer.is_available,
-        "moondream_installed": MOONDREAM_AVAILABLE,
+        "primary_model": "gemini" if analyzer.using_gemini else "moondream",
+        "gemini_available": GEMINI_AVAILABLE and analyzer.using_gemini,
+        "moondream_available": MOONDREAM_AVAILABLE,
         "model_loaded": analyzer._model_loaded,
         "observation_count": len(analyzer.get_geo_snapshot()),
     }

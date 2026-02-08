@@ -1,25 +1,42 @@
 """
 HorizonX — Vision Analyzer Service
 
-MoonDream-based video frame analysis with hierarchical geospatial storage.
-Based on treehack2025/moondream/main.py
+Gemini Vision-based video frame analysis with hierarchical geospatial storage.
+Supports fallback to MoonDream when Gemini is unavailable.
 
 Features:
   - Process video frames with geospatial coordinates
   - Hierarchical storage at multiple radius levels (0.1km, 1km, 10km)
   - Observation merging based on text similarity
   - Thread-safe parallel processing
+  - Primary: Google Gemini Vision API
+  - Fallback: MoonDream local VLM
 """
 
 import math
 import threading
 import time
+import os
+import base64
 from typing import List, Dict, Any, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-# Optional MoonDream import - gracefully handle if not installed
+# Gemini API (primary)
+try:
+    import google.generativeai as genai
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+        GEMINI_AVAILABLE = True
+    else:
+        GEMINI_AVAILABLE = False
+except ImportError:
+    GEMINI_AVAILABLE = False
+    genai = None
+
+# Optional MoonDream import - gracefully handle if not installed (fallback)
 try:
     import moondream as md
     from PIL import Image
@@ -165,27 +182,83 @@ class HierarchicalGeoStore:
 
 class VideoAnalyzer:
     """
-    Coordinates the ingestion of a video stream, calling MoonDream on each frame,
-    extracting environment info, and updating the HierarchicalGeoStore.
+    Coordinates the ingestion of a video stream, calling Gemini Vision (primary)
+    or MoonDream (fallback) on each frame, extracting environment info, 
+    and updating the HierarchicalGeoStore.
     """
+    
+    # Vision prompt for hazard detection
+    VISION_PROMPT = """You are a navigation assistant for a visually impaired person. 
+Analyze this image and describe:
+1. Any hazards, obstacles, or accessibility issues
+2. Sidewalk/path conditions
+3. People, vehicles, or moving objects
+4. Construction, flooding, poor lighting, or crowd density
+
+Be concise but thorough. Focus on safety-critical information first.
+Format: Brief description of the scene and any hazards detected."""
     
     def __init__(self, model_path: str = "moondream-0_5b-int8.mf"):
         self.model_path = model_path
-        self.model = None
+        self.model = None  # MoonDream model (fallback)
+        self.gemini_model = None  # Gemini model (primary)
         self.geo_store = HierarchicalGeoStore()
         self._model_loaded = False
+        self._gemini_available = False
         
-        if MOONDREAM_AVAILABLE:
+        # Try Gemini first (primary)
+        if GEMINI_AVAILABLE:
+            try:
+                self.gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+                self._gemini_available = True
+                self._model_loaded = True
+                print("Vision Analyzer: Using Gemini Vision API (primary)")
+            except Exception as e:
+                print(f"Warning: Could not initialize Gemini: {e}")
+        
+        # Fallback to MoonDream if Gemini not available
+        if not self._gemini_available and MOONDREAM_AVAILABLE:
             try:
                 self.model = md.vl(model=model_path)
                 self._model_loaded = True
+                print("Vision Analyzer: Using MoonDream (fallback)")
             except Exception as e:
                 print(f"Warning: Could not load MoonDream model: {e}")
-                print("Running in fallback mode without vision analysis.")
+                print("Running in placeholder mode without vision analysis.")
     
     @property
     def is_available(self) -> bool:
         return self._model_loaded
+    
+    @property
+    def using_gemini(self) -> bool:
+        return self._gemini_available
+    
+    def _process_with_gemini(self, image_path: str) -> str:
+        """Process image using Gemini Vision API."""
+        # Read and encode image
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+        
+        image_part = {
+            "mime_type": "image/jpeg",
+            "data": image_bytes
+        }
+        
+        response = self.gemini_model.generate_content([self.VISION_PROMPT, image_part])
+        return response.text
+    
+    def _process_with_moondream(self, image_path: str) -> str:
+        """Process image using MoonDream local model."""
+        image = Image.open(image_path)
+        encoded_image = self.model.encode_image(image)
+        
+        response = self.model.query(
+            encoded_image,
+            "Concisely describe what hazards, obstacles, or accessibility issues you see in this image. Focus on: sidewalk conditions, obstacles, construction, flooding, poor lighting, or crowd density."
+        )
+        
+        return response.get("answer", str(response))
     
     def process_frame(
         self,
@@ -197,7 +270,7 @@ class VideoAnalyzer:
     ) -> Optional[Dict]:
         """
         Process a single frame:
-        1) Use MoonDream to get environment data
+        1) Use Gemini (primary) or MoonDream (fallback) to get environment data
         2) Create an Observation
         3) Insert into geo_store
         
@@ -222,17 +295,13 @@ class VideoAnalyzer:
             return observation.to_dict()
         
         try:
-            # Load and encode image
-            image = Image.open(image_path)
-            encoded_image = self.model.encode_image(image)
-            
-            # Query the model for scene description
-            response = self.model.query(
-                encoded_image,
-                "Concisely describe what hazards, obstacles, or accessibility issues you see in this image. Focus on: sidewalk conditions, obstacles, construction, flooding, poor lighting, or crowd density."
-            )
-            
-            description = response.get("answer", str(response))
+            # Try Gemini first (primary), then MoonDream (fallback)
+            if self._gemini_available:
+                description = self._process_with_gemini(image_path)
+            elif self.model is not None:
+                description = self._process_with_moondream(image_path)
+            else:
+                description = "[No vision model available]"
             
             # Estimate urgency based on keywords
             urgency = self._estimate_urgency(description)
@@ -246,6 +315,7 @@ class VideoAnalyzer:
                     "lat": lat,
                     "lon": lon,
                     "frame_id": frame_id,
+                    "model": "gemini" if self._gemini_available else "moondream",
                 }]
             )
             
