@@ -14,9 +14,11 @@ import base64
 import json
 import time
 import uuid
+import threading
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
+from collections import deque
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -45,6 +47,46 @@ if ELEVENLABS_API_KEY:
     eleven_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
 else:
     eleven_client = None
+
+
+# ─── Rate Limiter ────────────────────────────────────────────────────────────
+
+class RateLimiter:
+    """
+    Simple token bucket rate limiter to prevent 429 errors from Gemini API.
+    Limits requests to avoid hitting quota limits.
+    """
+    def __init__(self, max_requests: int = 10, window_seconds: int = 60):
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.requests = deque()
+        self.lock = threading.Lock()
+    
+    def is_allowed(self) -> bool:
+        """Check if a request is allowed under rate limit."""
+        with self.lock:
+            now = time.time()
+            # Remove old requests outside the window
+            while self.requests and self.requests[0] < now - self.window_seconds:
+                self.requests.popleft()
+            
+            if len(self.requests) >= self.max_requests:
+                return False
+            
+            self.requests.append(now)
+            return True
+    
+    def wait_time(self) -> float:
+        """Return seconds to wait before next request is allowed."""
+        with self.lock:
+            if not self.requests:
+                return 0
+            oldest = self.requests[0]
+            wait = (oldest + self.window_seconds) - time.time()
+            return max(0, wait)
+
+# Gemini rate limiter: 10 requests per minute (conservative)
+gemini_rate_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
 
 # ─── Request/Response Models ─────────────────────────────────────────────────
@@ -575,6 +617,25 @@ async def analyze_scene(request: VisionAnalysisRequest):
         raise HTTPException(
             status_code=503,
             detail="Gemini API not configured. Set GEMINI_API_KEY environment variable."
+        )
+    
+    # Check rate limit to prevent 429 errors
+    if not gemini_rate_limiter.is_allowed():
+        wait_time = gemini_rate_limiter.wait_time()
+        print(f"[RateLimit] Request throttled. Wait {wait_time:.1f}s")
+        # Return a safe fallback response instead of failing
+        return VisionAnalysisResponse(
+            narration=f"Vision service busy. Proceeding safely. Retry in {int(wait_time)} seconds.",
+            obstacles=[],
+            navigation_command=NavigationCommand(
+                action="slow_down",
+                reason="Vision service rate limited - proceed with caution",
+                urgency="soon",
+                distance_meters=5.0
+            ),
+            path_clear=True,
+            confidence=0.5,
+            latency_ms=int((time.time() - start) * 1000)
         )
     
     try:
