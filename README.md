@@ -1,4 +1,4 @@
-# HorizonX
+# WayFinder
 
 **Privacy-first, offline-capable AI sight partner for visually impaired users — with a civic hazard intelligence platform for governments.**
 
